@@ -1,3 +1,7 @@
+Pipfile
+Pipfile.lock
+*.egg-info/
+
 # Prerequisites
 *.d
 
