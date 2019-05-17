@@ -64,7 +64,7 @@ volatile sig_atomic_t stop_requested = 0;
 
 void handle_signal(int)
 {
-    std::cout << "caught sigint, requesting stop." << std::endl;
+    std::cerr << "caught sigint, requesting stop." << std::endl;
     stop_requested = 1;
 }
 

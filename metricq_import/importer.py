@@ -26,6 +26,7 @@ import tempfile
 import json
 import os
 import datetime
+import subprocess
 
 import click
 import cloudant
@@ -296,15 +297,15 @@ class DataheapToHTAImporter(object):
         import_doc.save()
 
         try:
-            process = await asyncio.create_subprocess_exec(*args)
+            process = await asyncio.create_subprocess_exec(*args, stdout=subprocess.PIPE)
 
-            ret = await process.wait()
+            await process.communicate()
 
-            import_doc['return_code'] = ret
+            import_doc['return_code'] = process.returncode
             import_doc['end'] = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat()
             import_doc.save()
 
-            if ret != 0:
+            if process.returncode != 0:
                 self._failed_imports.append(metric)
         except FileNotFoundError:
             logger.error('Make sure hta_mysql_import is in your PATH.')
