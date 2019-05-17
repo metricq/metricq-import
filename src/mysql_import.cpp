@@ -79,8 +79,7 @@ json read_json_from_file(const std::filesystem::path& path)
 }
 
 template <typename L>
-size_t stream_query(sql::Connection& db, const std::string& query, L cb,
-                    size_t chunk_size = 20000000)
+size_t stream_query(sql::Connection& db, const std::string& query, L cb, size_t chunk_size)
 {
     std::unique_ptr<sql::PreparedStatement> stmt(db.prepareStatement(query + " LIMIT ?, ?"));
     for (size_t offset = 0;; offset += chunk_size)
@@ -101,7 +100,7 @@ size_t stream_query(sql::Connection& db, const std::string& query, L cb,
 
 void import(sql::Connection& in_db, hta::Directory& out_directory,
             const std::string& in_metric_name, const std::string& out_metric_name,
-            uint64_t min_timestamp, uint64_t max_timestamp)
+            uint64_t min_timestamp, uint64_t max_timestamp, uint64_t chunk_size)
 {
     auto& out_metric = out_directory[out_metric_name];
 
@@ -109,7 +108,7 @@ void import(sql::Connection& in_db, hta::Directory& out_directory,
 
     boost::timer::cpu_timer timer;
 
-    std::cout << "Starting import of: " << in_metric_name << std::endl;
+    std::cout << "[" << out_metric_name << "] starting import from " << in_metric_name << std::endl;
 
     uint64_t row = 0;
     std::string where;
@@ -121,27 +120,29 @@ void import(sql::Connection& in_db, hta::Directory& out_directory,
     hta::TimePoint previous_time;
     auto r = stream_query(
         in_db, "SELECT timestamp, value FROM " + in_metric_name + where + " ORDER BY timestamp ASC",
-        [&row, &out_metric, &previous_time](const auto& result) {
-          row++;
-          if (row % 1000000 == 0)
-          {
-              std::cout << row << " rows completed." << std::endl;
-          }
-          hta::TimePoint hta_time{ hta::duration_cast(
-              std::chrono::milliseconds(result.getUInt64(1))) };
-          if (hta_time <= previous_time)
-          {
-              std::cout << "Skipping non-monotonous timestamp " << hta_time << std::endl;
-              return;
-          }
-          previous_time = hta_time;
-          // Note: Dataheap uses milliseconds. We use nanoseconds.
-          out_metric.insert({ hta_time, static_cast<double>(result.getDouble(2)) });
-        });
+        [&row, &out_metric, &previous_time, out_metric_name, chunk_size](const auto& result) {
+            row++;
+            if (row % chunk_size == 0)
+            {
+                std::cout << "[" << out_metric_name << "] " << row << " rows completed."
+                          << std::endl;
+            }
+            hta::TimePoint hta_time{ hta::duration_cast(
+                std::chrono::milliseconds(result.getUInt64(1))) };
+            if (hta_time <= previous_time)
+            {
+                std::cout << "Skipping non-monotonous timestamp " << hta_time << std::endl;
+                return;
+            }
+            previous_time = hta_time;
+            // Note: Dataheap uses milliseconds. We use nanoseconds.
+            out_metric.insert({ hta_time, static_cast<double>(result.getDouble(2)) });
+        },
+        chunk_size);
     out_metric.flush();
-    std::cout << "Imported " << row << " / " << r << " rows for metric: " << out_metric_name
-              << "\n";
-    std::cout << timer.format() << "\n";
+    std::cout << "[" << out_metric_name << "] completed import of " << row << " / " << r
+              << " rows\n";
+    std::cout << timer.format() << std::endl;
 }
 
 void select_interval(sql::Connection& con, json& metric_config, const std::string& in_metric_name)
@@ -181,6 +182,7 @@ int main(int argc, char* argv[])
     uint64_t min_timestamp = 0;
     uint64_t max_timestamp = 0;
     bool auto_interval = false;
+    size_t chunk_size = 20000000;
 
     po::options_description desc("Import dataheap database into HTA");
 
@@ -190,6 +192,7 @@ int main(int argc, char* argv[])
         "config,c", po::value(&config_file), "path to config file (default \"config.json\").")(
         "metric,m", po::value<std::string>(), "name of metric")(
         "import-metric", po::value<std::string>(), "import name of metric")(
+        "mysql-chunk-size", po::value(&chunk_size), "the chunksize for mysql streaming")(
         "min-timestamp", po::value(&min_timestamp), "minimal timestamp for dump, in unix-ms")(
         "max-timestamp", po::value(&max_timestamp), "maximal timestamp for dump, in unix-ms")(
         "auto-interval,a", po::bool_switch(&auto_interval), "automatically select an interval");
@@ -212,7 +215,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // f"ur Tausendertrennzeichen
+    // for thousands separators
     std::cout.imbue(std::locale(""));
 
     auto out_metric_name = vm["metric"].as<std::string>();
@@ -228,9 +231,6 @@ int main(int argc, char* argv[])
     }
     // DO NOT do this. There are metrics like foo/bar_baz, which should be foo.bar_baz
     // std::replace(out_metric_name.begin(), out_metric_name.end(), '_', '.');
-
-    std::cout << "Using import metric name: " << in_metric_name
-              << ", hta metric name: " << out_metric_name << "\n";
 
     auto config = read_json_from_file(std::filesystem::path(config_file));
 
@@ -260,5 +260,6 @@ int main(int argc, char* argv[])
     hta::Directory out_directory(config);
 
     signal(SIGINT, handle_signal);
-    import(*con, out_directory, in_metric_name, out_metric_name, min_timestamp, max_timestamp);
+    import(*con, out_directory, in_metric_name, out_metric_name, min_timestamp, max_timestamp,
+           chunk_size);
 }

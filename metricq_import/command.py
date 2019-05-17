@@ -1,9 +1,24 @@
 from datetime import timedelta
+import logging
 
 import click
+import click_log
+import click_completion
 import pytimeparse
 
+from metricq.logging import get_logger
+
 from .importer import DataheapToHTAImporter
+
+logger = get_logger()
+
+click_log.basic_config(logger)
+logger.setLevel('INFO')
+# Use this if we ever use threads
+# logger.handlers[0].formatter = logging.Formatter(fmt='%(asctime)s %(threadName)-16s %(levelname)-8s %(message)s')
+logger.handlers[0].formatter = logging.Formatter(fmt='%(asctime)s [%(levelname)-8s] [%(name)-20s] %(message)s')
+
+click_completion.init()
 
 
 def parse_interval(ctx, param, value):
@@ -32,6 +47,8 @@ def command(name=''):
         @click.option('--check-max-age', default=True, callback=parse_interval,
                       help='check if the import db has revent values within a specified time range (e.g. "8h", "no")')
         @click.option('--assume-yes', '-y', is_flag=True, default=False, help='Automatic yes to prompts')
+        @click.option('--quiet', '-q', is_flag=True, default=False, help='Suppress stdout from importer')
+        @click_log.simple_verbosity_option(logger)
         def wrapper(metricq_token, metricq_url,
                     couchdb_url, couchdb_user, couchdb_password,
                     import_workers,
