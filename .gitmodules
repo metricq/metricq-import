@@ -1,0 +1,3 @@
+[submodule "lib/hta"]
+	path = lib/hta
+	url = https://github.com/metricq/hta.git
