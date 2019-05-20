@@ -70,6 +70,7 @@ class DataheapToHTAImporter(object):
                  check_values: bool = False,
                  check_interval: bool = True,
                  check_max_age=datetime.timedelta(hours=8),
+                 quiet: bool = False,
                  assume_yes: bool = False):
         self._metricq_url = metricq_url
         self._metricq_token = metricq_token
@@ -100,6 +101,8 @@ class DataheapToHTAImporter(object):
         self._check_values = check_values
         self._check_interval = check_interval
         self._check_max_age = check_max_age
+        self._quiet = quiet
+        # TODO USE QUIET
         self._assume_yes = assume_yes
 
         if not self._dry_run and not self._metricq_token:
@@ -191,8 +194,11 @@ class DataheapToHTAImporter(object):
         count_mean = int(count_total / len(counts))
         count_min = min(counts.values())
         count_max = max(counts.values())
-        click.echo(f'Total: {count_total:14,}, average {count_mean:14,} per metric')
-        click.echo(f'Range: {count_min:14,} - {count_max:14,}')
+        click.secho(f'Total: {count_total:14,} values', bold=True)
+        click.secho(f'Total: {len(counts):14,} metrics', bold=True)
+        click.secho(f'Mean:  {count_mean:14,} values per metric', bold=True)
+        click.secho(f'Min:   {count_min:14,} values', bold=True)
+        click.secho(f'Max:   {count_max:14,} values', bold=True)
 
     def _update_config(self):
         config_metrics = {metric.metricq_name: metric.config for metric in self._metrics}

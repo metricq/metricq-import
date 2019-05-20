@@ -22,3 +22,4 @@
 
 from .importer import DataheapToHTAImporter
 from .command import command
+from .util import simple_metricq_to_dataheap_db

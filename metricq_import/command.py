@@ -22,14 +22,13 @@ click_completion.init()
 
 
 def parse_interval(ctx, param, value):
-    if value.lower() in ('no', 'false', 'not'):
+    if not value or value.lower() in ('no', 'false', 'not'):
         return None
     return timedelta(seconds=pytimeparse.parse(value))
 
 
 def command(name=''):
     def decorator(func):
-        @click.command('MetricQ Dataheap importer for {}'.format(name))
         @click.option('--metricq-token', show_default=True)
         @click.option('--metricq-url', default='amqp://localhost/', show_default=True)
         @click.option('--couchdb-url', default='http://127.0.0.1:5984', show_default=True)
@@ -44,7 +43,7 @@ def command(name=''):
         @click.option('--dry-run', is_flag=True, default=False, show_default=True)
         @click.option('--check-values', is_flag=True, default=False, show_default=True)
         @click.option('--check-interval/--no-check-interval', is_flag=True, default=True, show_default=True)
-        @click.option('--check-max-age', default=True, callback=parse_interval,
+        @click.option('--check-max-age', default='8h', callback=parse_interval,
                       help='check if the import db has revent values within a specified time range (e.g. "8h", "no")')
         @click.option('--assume-yes', '-y', is_flag=True, default=False, help='Automatic yes to prompts')
         @click.option('--quiet', '-q', is_flag=True, default=False, help='Suppress stdout from importer')
@@ -53,7 +52,7 @@ def command(name=''):
                     couchdb_url, couchdb_user, couchdb_password,
                     import_workers,
                     import_host, import_port, import_user, import_password, import_database,
-                    dry_run, check_values, check_interval, check_max_age, assume_yes,
+                    dry_run, check_values, check_interval, check_max_age, assume_yes, quiet,
                     **kwargs):
             importer = DataheapToHTAImporter(
                 metricq_token=metricq_token, metricq_url=metricq_url,
@@ -62,14 +61,15 @@ def command(name=''):
                 import_host=import_host, import_port=import_port,
                 import_user=import_user, import_password=import_password, import_database=import_database,
                 dry_run=dry_run, check_values=check_values, check_interval=check_interval, check_max_age=check_max_age,
+                quiet=quiet,
                 assume_yes=assume_yes)
-            func(importer, **kwargs)
+            return func(importer, **kwargs)
 
         try:
             wrapper.__click_params__.extend(func.__click_params__)
         except AttributeError:
             pass
 
-        return wrapper
+        return click.command('MetricQ Dataheap importer for {}'.format(name))(wrapper)
 
     return decorator

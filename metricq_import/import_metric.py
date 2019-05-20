@@ -1,8 +1,11 @@
 from datetime import timedelta
 
+import click
+
 
 class ImportMetric(object):
-    def __init__(self, metricq_name, import_name, dataheap_name=None, sampling_rate=1, interval_factor=10,
+    def __init__(self, metricq_name, import_name, dataheap_name=None,
+                 sampling_rate=1, interval_factor=10,
                  interval_min=None, interval_max=None):
         self.metricq_name = metricq_name
         self.import_name = import_name
@@ -14,8 +17,16 @@ class ImportMetric(object):
         self.sampling_rate = sampling_rate
 
         if self.interval_min is None:
-            sampling_interval = 1e9 / sampling_rate
-            self.interval_min = int(sampling_interval * 40)
+            sampling_interval = 1 / sampling_rate
+
+            if sampling_interval != round(sampling_interval, 3):
+                click.secho(
+                    f'[{metricq_name}] warning odd sampling interval {sampling_interval} (rate {sampling_rate})',
+                    bold=True, bg='red',
+                )
+                click.confirm('Continue?', abort=True)
+
+            self.interval_min = int(sampling_interval * 40 * 1e9)
             self.interval_min = self.interval_min - (self.interval_min % interval_factor)
         assert self.interval_min > 0
         assert self.interval_min % interval_factor == 0
