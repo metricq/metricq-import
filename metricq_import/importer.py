@@ -77,8 +77,9 @@ class DataheapToHTAImporter(object):
         self._couchdb_client = cloudant.client.CouchDB(couchdb_user, couchdb_password,
                                                        url=couchdb_url, connect=True)
         self._couchdb_session = self._couchdb_client.session()
-        self._couchdb_db_config = self._couchdb_client.create_database("config")
-        self._couchdb_db_import = self._couchdb_client.create_database("import")
+        self.couchdb_db_config = self._couchdb_client.create_database("config")
+        self.couchdb_db_import = self._couchdb_client.create_database("import")
+        self.couchdb_db_meta = self._couchdb_client.create_database("metadata")
 
         self._num_workers = import_workers
 
@@ -197,7 +198,7 @@ class DataheapToHTAImporter(object):
         config_metrics = {metric.metricq_name: metric.config for metric in self._metrics}
 
         try:
-            config_document = self._couchdb_db_config[self._metricq_token]
+            config_document = self.couchdb_db_config[self._metricq_token]
         except KeyError:
             raise KeyError(f"Please add a basic configuration in the CouchDB for the db '{self._metricq_token}'")
 
@@ -293,7 +294,7 @@ class DataheapToHTAImporter(object):
             'config': config,
         }
 
-        import_doc = self._couchdb_db_import.create_document(import_data)
+        import_doc = self.couchdb_db_import.create_document(import_data)
         import_doc.save()
 
         try:
