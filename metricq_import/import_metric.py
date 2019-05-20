@@ -1,3 +1,6 @@
+from datetime import timedelta
+
+
 class ImportMetric(object):
     def __init__(self, metricq_name, import_name, dataheap_name=None, sampling_rate=1, interval_factor=10,
                  interval_min=None, interval_max=None):
@@ -11,7 +14,11 @@ class ImportMetric(object):
         self.sampling_rate = sampling_rate
 
         if self.interval_min is None:
-            self.interval_min = sampling_rate * 40 * 1e9
+            sampling_interval = 1e9 / sampling_rate
+            self.interval_min = int(sampling_interval * 40)
+            self.interval_min = self.interval_min - (self.interval_min % interval_factor)
+        assert self.interval_min > 0
+        assert self.interval_min % interval_factor == 0
         if self.interval_max is None:
             self.interval_max = self._default_interval_max()
 
@@ -33,4 +40,6 @@ class ImportMetric(object):
         }
 
     def __str__(self):
-        return f'{self.import_name} => {self.metricq_name}, {self.interval_min:,}, {self.interval_max:,}, {self.interval_factor}'
+        nice_interval_min = self.interval_min / 1e9
+        nice_interval_max = timedelta(microseconds=self.interval_max / 1000)
+        return f'{self.import_name} => {self.metricq_name}, {nice_interval_min:,}, {nice_interval_max:,}, {self.interval_factor}'
