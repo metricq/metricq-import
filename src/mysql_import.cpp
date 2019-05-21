@@ -175,7 +175,7 @@ void import(sql::Connection& in_db, hta::Directory& out_directory,
         }
 
         out_metric.flush();
-        std::cout << "[" << out_metric_name << "] " << row << " rows completed.";
+        std::cout << "[" << out_metric_name << "] " << row << " rows completed." << std::endl;
 
         current_timestamp = current_dataheap_timestamp + 1;
     }
