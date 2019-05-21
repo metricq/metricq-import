@@ -93,7 +93,7 @@ class DataheapToHTAImporter(object):
         self._metrics = []
         self._failed_imports = []
 
-        self._last_metric = None
+        self._last_completed_metric = None
         self._import_begin = None
 
         self._dry_run = dry_run
@@ -244,9 +244,9 @@ class DataheapToHTAImporter(object):
         fake_agent = FakeAgent(self._metricq_token, self._metricq_url)
         fake_agent.run()
 
-    def _show_last_metric(self, item):
-        if self._last_metric:
-            return self._last_metric.metricq_name
+    def _last_completed_metric_name(self, item):
+        if self._last_completed_metric:
+            return self._last_completed_metric.metricq_name
         return ''
 
     def _run_import(self):
@@ -257,17 +257,17 @@ class DataheapToHTAImporter(object):
         self.num_import_metrics = self.queue.qsize()
 
         # run all pending import tasks
-        with click.progressbar(length=self.num_import_metrics, label='Importing metrics', item_show_func=self._show_last_metric) as bar:
+        with click.progressbar(length=self.num_import_metrics, label='Importing metrics', item_show_func=self._last_completed_metric_name) as bar:
             asyncio.run(self.import_main(bar))
 
     async def import_worker(self, bar):
         while True:
             try:
                 metric = self.queue.get_nowait()
-                self._last_metric = metric
             except asyncio.QueueEmpty:
                 return
             await self.import_metric(metric)
+            self._last_completed_metric = metric
             bar.update(1)
 
     async def import_main(self, bar):
