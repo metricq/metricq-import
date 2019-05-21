@@ -78,102 +78,107 @@ json read_json_from_file(const std::filesystem::path& path)
     return config;
 }
 
-template <typename L>
-size_t stream_query(sql::Connection& db, const std::string& query, L cb, size_t chunk_size)
+struct stats
 {
-    std::unique_ptr<sql::PreparedStatement> stmt(db.prepareStatement(query + " LIMIT ?, ?"));
-    for (size_t offset = 0;; offset += chunk_size)
-    {
-        stmt->setUInt64(1, offset);
-        stmt->setUInt64(2, chunk_size);
-        std::unique_ptr<sql::ResultSet> res(stmt->executeQuery());
-        while (res->next())
-        {
-            cb(*res);
-        }
-        if (res->rowsCount() != chunk_size || stop_requested)
-        {
-            return offset + res->rowsCount();
-        }
-    }
+    uint64_t min_timestamp;
+    uint64_t max_timestamp;
+    uint64_t count;
+};
+
+stats stats_query(sql::Connection& db, const std::string metric)
+{
+    auto query =
+        std::string("SELECT COUNT(`timestamp`), MIN(`timestamp`), MAX(`timestamp`) FROM ") + metric;
+    auto stmt = std::unique_ptr<sql::PreparedStatement>(db.prepareStatement(query));
+    auto result = std::unique_ptr<sql::ResultSet>(stmt->executeQuery());
+    assert(result->next());
+    stats ret;
+    ret.count = result->getUInt64(1);
+    ret.min_timestamp = result->getUInt64(2);
+    ret.max_timestamp = result->getUInt64(3);
+    return ret;
 }
 
 void import(sql::Connection& in_db, hta::Directory& out_directory,
             const std::string& in_metric_name, const std::string& out_metric_name,
-            uint64_t min_timestamp, uint64_t max_timestamp, uint64_t chunk_size)
+            uint64_t min_timestamp, uint64_t max_timestamp, uint64_t max_limit)
 {
-    auto& out_metric = out_directory[out_metric_name];
-
-    std::unique_ptr<sql::Statement> stmt(in_db.createStatement());
-
     boost::timer::cpu_timer timer;
 
-    std::cout << "[" << out_metric_name << "] starting import from " << in_metric_name << std::endl;
+    auto stats = stats_query(in_db, in_metric_name);
+    auto& out_metric = out_directory[out_metric_name];
 
     uint64_t row = 0;
-    std::string where;
-    if (min_timestamp || max_timestamp)
-    {
-        where += " WHERE timestamp >= '" + std::to_string(min_timestamp) + "' AND timestamp <= '" +
-                 std::to_string(max_timestamp) + "'";
-    }
     hta::TimePoint previous_time;
-    auto r = stream_query(
-        in_db, "SELECT timestamp, value FROM " + in_metric_name + where + " ORDER BY timestamp ASC",
-        [&row, &out_metric, &previous_time, out_metric_name, chunk_size](const auto& result) {
+    uint64_t current_dataheap_timestamp;
+
+    std::string query = std::string("SELECT timestamp, value FROM ") + in_metric_name +
+                        " WHERE timestamp >= ? AND timestamp < ?" +
+                        " ORDER BY timestamp ASC LIMIT ?";
+
+    std::unique_ptr<sql::PreparedStatement> stmt(in_db.prepareStatement(query));
+
+    min_timestamp = std::max(min_timestamp, stats.min_timestamp);
+    if (max_timestamp)
+    {
+        max_timestamp = std::min(max_timestamp, stats.max_timestamp + 1);
+    }
+    else
+    {
+        max_timestamp = stats.max_timestamp + 1;
+    }
+
+    auto sampling_interval =
+        static_cast<double>(stats.max_timestamp - stats.min_timestamp) / stats.count;
+    uint64_t chunk_timedelta =
+        sampling_interval * max_limit / 2; // Use 1/2 to not run into limit too often
+
+    std::cout << "[" << out_metric_name << "] starting import from " << in_metric_name
+              << " using a chunk time of " << chunk_timedelta << std::endl;
+
+    auto current_timestamp = min_timestamp;
+    while (true)
+    {
+        if (current_timestamp >= max_timestamp)
+        {
+            std::cout << "[" << out_metric_name << "] completed import of " << row << " rows\n";
+            std::cout << timer.format() << std::endl;
+            return;
+        }
+
+        uint64_t next_timestamp = std::min(current_timestamp + chunk_timedelta, max_timestamp);
+
+        stmt->setUInt64(1, current_timestamp);
+        stmt->setUInt64(2, next_timestamp);
+        stmt->setUInt64(3, max_limit);
+
+        std::unique_ptr<sql::ResultSet> res(stmt->executeQuery());
+
+        if (res->rowsCount() == 0)
+        {
+            current_timestamp = next_timestamp;
+            continue;
+        }
+        while (res->next())
+        {
+            current_dataheap_timestamp = res->getUInt64(1);
             row++;
-            if (row % chunk_size == 0)
-            {
-                std::cout << "[" << out_metric_name << "] " << row << " rows completed."
-                          << std::endl;
-            }
             hta::TimePoint hta_time{ hta::duration_cast(
-                std::chrono::milliseconds(result.getUInt64(1))) };
+                std::chrono::milliseconds(current_dataheap_timestamp)) };
             if (hta_time <= previous_time)
             {
                 std::cout << "Skipping non-monotonous timestamp " << hta_time << std::endl;
-                return;
+                continue;
             }
             previous_time = hta_time;
-            // Note: Dataheap uses milliseconds. We use nanoseconds.
-            out_metric.insert({ hta_time, static_cast<double>(result.getDouble(2)) });
-        },
-        chunk_size);
-    out_metric.flush();
-    std::cout << "[" << out_metric_name << "] completed import of " << row << " / " << r
-              << " rows\n";
-    std::cout << timer.format() << std::endl;
-}
+            out_metric.insert({ hta_time, static_cast<double>(res->getDouble(2)) });
+        }
 
-void select_interval(sql::Connection& con, json& metric_config, const std::string& in_metric_name)
-{
-    auto stmt = std::unique_ptr<sql::PreparedStatement>(con.prepareStatement(
-        std::string("SELECT COUNT(`timestamp`), MIN(`timestamp`), MAX(`timestamp`) FROM ") +
-        in_metric_name));
-    auto result = std::unique_ptr<sql::ResultSet>(stmt->executeQuery());
-    assert(result->next());
-    auto count = result->getUInt64(1);
-    auto db_min_timestamp = result->getInt64(2);
-    auto db_max_timestamp = result->getInt64(3);
+        out_metric.flush();
+        std::cout << "[" << out_metric_name << "] " << row << " rows completed.";
 
-    assert(count > 1);
-
-    auto average_interval_ns = (db_max_timestamp - db_min_timestamp) * 1e6 / (count - 1);
-    int interval_factor = 10;
-    if (metric_config.count("interval_factor"))
-    {
-        interval_factor = metric_config["interval_factor"];
+        current_timestamp = current_dataheap_timestamp + 1;
     }
-    int64_t interval_min = std::llround(
-        std::pow(interval_factor,
-                 std::ceil(std::log(0.8 * average_interval_ns) / std::log(interval_factor)) + 1));
-    metric_config["interval_min"] = interval_min;
-
-    std::cout << "Total count: " << count << "\n";
-    std::cout << "Timestamp range: " << db_min_timestamp << " - " << db_max_timestamp << "\n";
-    std::cout << "Average interval " << average_interval_ns << "ns.\n";
-    std::cout << "Interval factor: " << interval_factor << "\n";
-    std::cout << "Determined interval_min of " << interval_min << "\n";
 }
 
 int main(int argc, char* argv[])
@@ -181,7 +186,6 @@ int main(int argc, char* argv[])
     std::string config_file = "config.json";
     uint64_t min_timestamp = 0;
     uint64_t max_timestamp = 0;
-    bool auto_interval = false;
     size_t chunk_size = 20000000;
 
     po::options_description desc("Import dataheap database into HTA");
@@ -194,8 +198,7 @@ int main(int argc, char* argv[])
         "import-metric", po::value<std::string>(), "import name of metric")(
         "mysql-chunk-size", po::value(&chunk_size), "the chunksize for mysql streaming")(
         "min-timestamp", po::value(&min_timestamp), "minimal timestamp for dump, in unix-ms")(
-        "max-timestamp", po::value(&max_timestamp), "maximal timestamp for dump, in unix-ms")(
-        "auto-interval,a", po::bool_switch(&auto_interval), "automatically select an interval");
+        "max-timestamp", po::value(&max_timestamp), "maximal timestamp for dump, in unix-ms");
     // clang-format on
 
     po::variables_map vm;
@@ -248,10 +251,6 @@ int main(int argc, char* argv[])
     {
         if (metric_config["name"] == out_metric_name)
         {
-            if (auto_interval)
-            {
-                select_interval(*con, metric_config, in_metric_name);
-            }
             config["metrics"] = json::array({ metric_config });
             break;
         }
