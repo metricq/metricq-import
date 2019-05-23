@@ -171,7 +171,13 @@ void import(sql::Connection& in_db, hta::Directory& out_directory,
                 continue;
             }
             previous_time = hta_time;
-            out_metric.insert({ hta_time, static_cast<double>(res->getDouble(2)) });
+            auto value = static_cast<double>(res->getDouble(2));
+            if (value > 1e12 || value < -1e12)
+            {
+                std::cerr << "[" << out_metric_name << "] extreme value " << value << std::endl;
+                throw std::runtime_error("Value exceeds expectation.");
+            }
+            out_metric.insert({ hta_time, value });
         }
 
         out_metric.flush();
@@ -259,6 +265,14 @@ int main(int argc, char* argv[])
     hta::Directory out_directory(config);
 
     signal(SIGINT, handle_signal);
-    import(*con, out_directory, in_metric_name, out_metric_name, min_timestamp, max_timestamp,
-           chunk_size);
+    try
+    {
+        import(*con, out_directory, in_metric_name, out_metric_name, min_timestamp, max_timestamp,
+               chunk_size);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "error: " << e.what();
+        return -1;
+    }
 }
