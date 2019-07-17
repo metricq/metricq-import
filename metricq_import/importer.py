@@ -71,7 +71,9 @@ class DataheapToHTAImporter(object):
                  check_interval: bool = True,
                  check_max_age=datetime.timedelta(hours=8),
                  quiet: bool = False,
-                 assume_yes: bool = False):
+                 assume_yes: bool = False,
+                 ignore_out_of_range_timestamps: bool = False,
+        ):
         self._metricq_url = metricq_url
         self._metricq_token = metricq_token
 
@@ -104,6 +106,7 @@ class DataheapToHTAImporter(object):
         self._quiet = quiet
         # TODO USE QUIET
         self._assume_yes = assume_yes
+        self._ignore_out_of_range_timestamps = ignore_out_of_range_timestamps
 
         if not self._dry_run and not self._metricq_token:
             raise ValueError('Must specify metricq-token unless dry-run')
@@ -153,9 +156,13 @@ class DataheapToHTAImporter(object):
         counts = {}
         for metric in self._metrics:
             with mysql.cursor() as cursor:
-                cursor.execute(f"SELECT COUNT(*) as count, "
-                               f"MIN(timestamp) as t_min, MAX(timestamp) as t_max"
-                               f" FROM `{metric.import_name}`")
+                sql = (f"SELECT COUNT(*) as count,"
+                       f" MIN(timestamp) as t_min, MAX(timestamp) as t_max"
+                       f" FROM `{metric.import_name}`")
+                if self._ignore_out_of_range_timestamps:
+                    # 29.12.2269 in milliseconds
+                    sql += " WHERE timestamp < 9466848000000"
+                cursor.execute(sql)
                 count, t_min, t_max = cursor.fetchone()
                 t_min /= 1e3
                 t_max /= 1e3

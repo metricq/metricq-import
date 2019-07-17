@@ -44,15 +44,18 @@ def command(name=''):
         @click.option('--check-values', is_flag=True, default=False, show_default=True)
         @click.option('--check-interval/--no-check-interval', is_flag=True, default=True, show_default=True)
         @click.option('--check-max-age', default='8h', callback=parse_interval,
-                      help='check if the import db has revent values within a specified time range (e.g. "8h", "no")')
+                      help='check if the import db has recent values within a specified time range (e.g. "8h", "no")')
         @click.option('--assume-yes', '-y', is_flag=True, default=False, help='Automatic yes to prompts')
         @click.option('--quiet', '-q', is_flag=True, default=False, help='Suppress stdout from importer')
+        @click.option('--ignore-out-of-range-timestamps', is_flag=True, default=False,
+                      help='Ignore timestamps that are totally far in the future from broken sources')
         @click_log.simple_verbosity_option(logger)
         def wrapper(metricq_token, metricq_url,
                     couchdb_url, couchdb_user, couchdb_password,
                     import_workers,
                     import_host, import_port, import_user, import_password, import_database,
                     dry_run, check_values, check_interval, check_max_age, assume_yes, quiet,
+                    ignore_out_of_range_timestamps,
                     **kwargs):
             importer = DataheapToHTAImporter(
                 metricq_token=metricq_token, metricq_url=metricq_url,
@@ -62,7 +65,9 @@ def command(name=''):
                 import_user=import_user, import_password=import_password, import_database=import_database,
                 dry_run=dry_run, check_values=check_values, check_interval=check_interval, check_max_age=check_max_age,
                 quiet=quiet,
-                assume_yes=assume_yes)
+                assume_yes=assume_yes,
+                ignore_out_of_range_timestamps=ignore_out_of_range_timestamps,
+            )
             return func(importer, **kwargs)
 
         try:
