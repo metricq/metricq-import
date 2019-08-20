@@ -53,4 +53,4 @@ class ImportMetric(object):
     def __str__(self):
         nice_interval_min = self.interval_min / 1e9
         nice_interval_max = timedelta(microseconds=self.interval_max / 1000)
-        return f'{self.import_name} => {self.metricq_name}, {nice_interval_min:,}, {nice_interval_max:,}, {self.interval_factor}'
+        return f'{self.import_name} => {self.metricq_name}, {nice_interval_min}, {nice_interval_max}, {self.interval_factor}'
