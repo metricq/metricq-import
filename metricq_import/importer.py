@@ -73,6 +73,7 @@ class DataheapToHTAImporter(object):
                  quiet: bool = False,
                  assume_yes: bool = False,
                  ignore_out_of_range_timestamps: bool = False,
+                 resume: bool = False,
         ):
         self._metricq_url = metricq_url
         self._metricq_token = metricq_token
@@ -107,6 +108,7 @@ class DataheapToHTAImporter(object):
         # TODO USE QUIET
         self._assume_yes = assume_yes
         self._ignore_out_of_range_timestamps = ignore_out_of_range_timestamps
+        self._resume = resume
 
         if not self._dry_run and not self._metricq_token:
             raise ValueError('Must specify metricq-token unless dry-run')
@@ -139,8 +141,9 @@ class DataheapToHTAImporter(object):
         self._confirm(f'Please make sure the MetricQ db with the token '
                       f'"{self._metricq_token}" is not running! Continue?')
 
-        self._update_config()
-        self._create_bindings()
+        if not self._resume:
+            self._update_config()
+            self._create_bindings()
         self._import_begin = Timestamp.now()
         self._run_import()
 
@@ -282,6 +285,20 @@ class DataheapToHTAImporter(object):
         await asyncio.wait(workers)
 
     async def import_metric(self, metric):
+        if self._resume:
+            try:
+                old_import = self.couchdb_db_import[metric]
+                old_import.fetch()
+                if old_import.get('return_code', -1) != 0:
+                    click.echo(f"{metric} was partially imported, please cleanup")
+                    raise RuntimeError("partial import")
+                else:
+                    click.echo(f"{metric} successfully imported, continue")
+                    return
+            except KeyError:
+                pass
+
+
         # write config into a tmpfile
         conffile, conffile_name = tempfile.mkstemp(prefix='metricq-import-', suffix='.json', text=True)
         with open(conffile, 'w') as conf:

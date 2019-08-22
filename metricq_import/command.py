@@ -49,13 +49,14 @@ def command(name=''):
         @click.option('--quiet', '-q', is_flag=True, default=False, help='Suppress stdout from importer')
         @click.option('--ignore-out-of-range-timestamps', is_flag=True, default=False,
                       help='Ignore timestamps that are totally far in the future from broken sources')
+        @click.option('--resume', is_flag=True, default=False, show_default=True)
         @click_log.simple_verbosity_option(logger)
         def wrapper(metricq_token, metricq_url,
                     couchdb_url, couchdb_user, couchdb_password,
                     import_workers,
                     import_host, import_port, import_user, import_password, import_database,
                     dry_run, check_values, check_interval, check_max_age, assume_yes, quiet,
-                    ignore_out_of_range_timestamps,
+                    ignore_out_of_range_timestamps, resume,
                     **kwargs):
             importer = DataheapToHTAImporter(
                 metricq_token=metricq_token, metricq_url=metricq_url,
@@ -67,6 +68,7 @@ def command(name=''):
                 quiet=quiet,
                 assume_yes=assume_yes,
                 ignore_out_of_range_timestamps=ignore_out_of_range_timestamps,
+                resume=resume,
             )
             return func(importer, **kwargs)
 
