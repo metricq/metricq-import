@@ -141,8 +141,8 @@ class DataheapToHTAImporter(object):
         self._confirm(f'Please make sure the MetricQ db with the token '
                       f'"{self._metricq_token}" is not running! Continue?')
 
+        self._update_config()
         if not self._resume:
-            self._update_config()
             self._create_bindings()
         self._import_begin = Timestamp.now()
         self._run_import()
@@ -221,22 +221,24 @@ class DataheapToHTAImporter(object):
         config_document.fetch()
         current_config = dict(config_document)
         current_metrics = current_config["metrics"]
-        current_metric_names = list(current_metrics.keys())
-        conflicting_metrics = [metric for metric in self._metrics if metric.metricq_name in current_metric_names]
 
-        if conflicting_metrics:
-            print('The following metrics have already been defined in the database, but are in the import set:')
-            for metric in conflicting_metrics:
-                print(f' - {metric.metricq_name}')
+        if not self._resume:
+            current_metric_names = list(current_metrics.keys())
+            conflicting_metrics = [metric for metric in self._metrics if metric.metricq_name in current_metric_names]
 
-            if not self._confirm('Overwrite old entries?', abort=False):
-                raise RuntimeError('Please remove the config for the existing metrics'
-                                   ' or remove them from the import set')
+            if conflicting_metrics:
+                print('The following metrics have already been defined in the database, but are in the import set:')
+                for metric in conflicting_metrics:
+                    print(f' - {metric.metricq_name}')
 
-        current_metrics.update(config_metrics)
+                if not self._confirm('Overwrite old entries?', abort=False):
+                    raise RuntimeError('Please remove the config for the existing metrics'
+                                       ' or remove them from the import set')
 
-        config_document['metrics'] = current_metrics
-        config_document.save()
+            current_metrics.update(config_metrics)
+
+            config_document['metrics'] = current_metrics
+            config_document.save()
 
         self.import_config = {
             'type': "file",
