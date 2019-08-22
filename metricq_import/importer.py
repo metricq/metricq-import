@@ -287,13 +287,13 @@ class DataheapToHTAImporter(object):
     async def import_metric(self, metric):
         if self._resume:
             try:
-                old_import = self.couchdb_db_import[metric]
+                old_import = self.couchdb_db_import[metric.metricq_name]
                 old_import.fetch()
                 if old_import.get('return_code', -1) != 0:
-                    click.echo(f"{metric} was partially imported, please cleanup")
+                    click.echo(f"{metric.metricq_name} was partially imported, please cleanup")
                     raise RuntimeError("partial import")
                 else:
-                    click.echo(f"{metric} successfully imported, continue")
+                    click.echo(f"{metric.metricq_name} successfully imported, continue")
                     return
             except KeyError:
                 pass
