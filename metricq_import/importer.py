@@ -188,7 +188,7 @@ class DataheapToHTAImporter(object):
                     self._confirm()
 
                 if self._check_values:
-                    cursor.execute(f"MIN(value) as value_min, MAX(value) as value_max, "
+                    cursor.execute(f"MIN(value) as value_min, MAX(value) as value_max "
                                    f" FROM `{metric.import_name}`")
                     value_min, value_max = cursor.fetchone()
 
