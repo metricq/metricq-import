@@ -55,7 +55,7 @@ def command(name=""):
             default="admin",
             prompt=True,
             show_default=True,
-            envvar="METRICQ_COUCHDB_USER",
+            envvar="METRICQ_COUCHDB_PASSWORD",
         )
         @click.option("--import-workers", default=3, type=int, show_default=True)
         @click.option("--import-host", default="127.0.0.1", show_default=True)
