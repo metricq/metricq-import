@@ -32,13 +32,30 @@ def parse_interval(ctx, param, value):
 def command(name=""):
     def decorator(func):
         @click.option("--metricq-token", show_default=True)
-        @click.option("--metricq-url", default="amqp://localhost/", show_default=True)
         @click.option(
-            "--couchdb-url", default="http://127.0.0.1:5984", show_default=True
+            "--metricq-url",
+            default="amqp://localhost/",
+            show_default=True,
+            envvar="METRICQ_URL",
         )
-        @click.option("--couchdb-user", default="admin", show_default=True)
         @click.option(
-            "--couchdb-password", default="admin", prompt=True, show_default=True
+            "--couchdb-url",
+            default="http://127.0.0.1:5984",
+            show_default=True,
+            envvar="METRICQ_COUCHDB_URL",
+        )
+        @click.option(
+            "--couchdb-user",
+            default="admin",
+            show_default=True,
+            envvar="METRICQ_COUCHDB_USER",
+        )
+        @click.option(
+            "--couchdb-password",
+            default="admin",
+            prompt=True,
+            show_default=True,
+            envvar="METRICQ_COUCHDB_USER",
         )
         @click.option("--import-workers", default=3, type=int, show_default=True)
         @click.option("--import-host", default="127.0.0.1", show_default=True)
