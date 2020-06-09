@@ -20,6 +20,6 @@
 # You should have received a copy of the GNU General Public License
 # along with metricq.  If not, see <http://www.gnu.org/licenses/>.
 
-from .importer import DataheapToHTAImporter
 from .command import command
+from .importer import DataheapToHTAImporter
 from .util import simple_metricq_to_dataheap_db

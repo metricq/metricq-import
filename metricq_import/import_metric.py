@@ -4,9 +4,16 @@ import click
 
 
 class ImportMetric(object):
-    def __init__(self, metricq_name, import_name, dataheap_name=None,
-                 sampling_rate=1, interval_factor=10,
-                 interval_min=None, interval_max=None):
+    def __init__(
+        self,
+        metricq_name,
+        import_name,
+        dataheap_name=None,
+        sampling_rate=1,
+        interval_factor=10,
+        interval_min=None,
+        interval_max=None,
+    ):
         self.metricq_name = metricq_name
         self.import_name = import_name
         self.dataheap_name = dataheap_name
@@ -21,13 +28,16 @@ class ImportMetric(object):
 
             if sampling_interval != round(sampling_interval, 3):
                 click.secho(
-                    f'[{metricq_name}] warning odd sampling interval {sampling_interval} (rate {sampling_rate})',
-                    bold=True, bg='red',
+                    f"[{metricq_name}] warning odd sampling interval {sampling_interval} (rate {sampling_rate})",
+                    bold=True,
+                    bg="red",
                 )
-                click.confirm('Continue?', abort=True)
+                click.confirm("Continue?", abort=True)
 
             self.interval_min = int(sampling_interval * 40 * 1e9)
-            self.interval_min = self.interval_min - (self.interval_min % interval_factor)
+            self.interval_min = self.interval_min - (
+                self.interval_min % interval_factor
+            )
         assert self.interval_min > 0
         assert self.interval_min % interval_factor == 0
         if self.interval_max is None:
@@ -53,4 +63,4 @@ class ImportMetric(object):
     def __str__(self):
         nice_interval_min = self.interval_min / 1e9
         nice_interval_max = timedelta(microseconds=self.interval_max / 1000)
-        return f'{self.import_name} => {self.metricq_name}, {nice_interval_min}, {nice_interval_max}, {self.interval_factor}'
+        return f"{self.import_name} => {self.metricq_name}, {nice_interval_min}, {nice_interval_max}, {self.interval_factor}"
